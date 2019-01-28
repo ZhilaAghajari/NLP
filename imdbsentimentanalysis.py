@@ -144,3 +144,50 @@ from gensim.test.test_doc2vec import ConcatenatedDoc2Vec
 models_by_name['dbow+dmm'] = ConcatenatedDoc2Vec([simple_models[0], simple_models[1]])
 models_by_name['dbow+dmc'] = ConcatenatedDoc2Vec([simple_models[0], simple_models[2]])
 
+
+#part 6
+import numpy as np
+import statsmodels.api as sm
+from random import sample
+
+
+def logistic_predictor_from_data(train_targets, train_regressors):
+    """Fit a statsmodel logistic predictor on supplied data"""
+    logit = sm.Logit(train_targets, train_regressors)
+    predictor = logit.fit(disp=0)
+    # print(predictor.summary())
+    return predictor
+
+
+def error_rate_for_model(test_model, train_set, test_set,
+                         reinfer_train=False, reinfer_test=False,
+                         infer_steps=None, infer_alpha=None, infer_subsample=0.2):
+    """Report error rate on test_doc sentiments, using supplied model and train_docs"""
+
+    train_targets = [doc.sentiment for doc in train_set]
+    if reinfer_train:
+        train_regressors = [test_model.infer_vector(doc.words, steps=infer_steps, alpha=infer_alpha) for doc in
+                            train_set]
+    else:
+        train_regressors = [test_model.docvecs[doc.tags[0]] for doc in train_set]
+    train_regressors = sm.add_constant(train_regressors)
+    predictor = logistic_predictor_from_data(train_targets, train_regressors)
+
+    test_data = test_set
+    if reinfer_test:
+        if infer_subsample < 1.0:
+            test_data = sample(test_data, int(infer_subsample * len(test_data)))
+        test_regressors = [test_model.infer_vector(doc.words, steps=infer_steps, alpha=infer_alpha) for doc in
+                           test_data]
+    else:
+        test_regressors = [test_model.docvecs[doc.tags[0]] for doc in test_docs]
+    test_regressors = sm.add_constant(test_regressors)
+
+    # Predict & evaluate
+    test_predictions = predictor.predict(test_regressors)
+    corrects = sum(np.rint(test_predictions) == [doc.sentiment for doc in test_data])
+    errors = len(test_predictions) - corrects
+    error_rate = float(errors) / len(test_predictions)
+    return (error_rate, errors, len(test_predictions), predictor)
+
+
